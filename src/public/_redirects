@@ -1,0 +1,3 @@
+# Angular maneja las rutas del lado del navegador.
+# Sin esta línea, entrar directo a /agenda devuelve 404 en Netlify.
+/*    /index.html   200
