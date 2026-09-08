@@ -14,6 +14,7 @@ export const rutas: Routes = [
     loadComponent: () =>
       import("./paginas/recuperar.component").then((m) => m.RecuperarComponent),
   },
+
   { path: "entrar", redirectTo: "", pathMatch: "full" },
   {
     path: "",

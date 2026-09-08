@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from "@angular/core";
+import { Component, OnDestroy, computed, inject, signal } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { forkJoin } from "rxjs";
@@ -35,6 +35,18 @@ const ALTO_HORA = 62; // píxeles por hora
 
     @if (error()) {
       <div class="error contenido">{{ error() }}</div>
+    }
+
+    @if (nuevas() > 0) {
+      <div class="aviso-nuevas" (click)="verNuevas()">
+        <span class="punto"></span>
+        <b>{{ nuevas() }}</b>
+        {{
+          nuevas() === 1
+            ? "cita nueva entró por WhatsApp"
+            : "citas nuevas entraron por WhatsApp"
+        }}
+      </div>
     }
 
     @if (cargando()) {
@@ -450,6 +462,56 @@ const ALTO_HORA = 62; // píxeles por hora
         max-width: 1500px;
         margin-inline: auto;
         padding: 0 18px 80px;
+      }
+
+      .aviso-nuevas {
+        max-width: 1500px;
+        margin: 0 auto 12px;
+        padding: 11px 16px;
+        background: var(--wa);
+        color: #fff;
+        border-radius: 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 14.5px;
+        width: calc(100% - 36px);
+        animation: asomar 0.4s var(--curva) both;
+      }
+      .aviso-nuevas b {
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .aviso-nuevas:hover {
+        filter: brightness(0.95);
+      }
+      .punto {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #fff;
+        flex: none;
+        animation: latido 1.6s ease-in-out infinite;
+      }
+      @keyframes asomar {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes latido {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
       }
 
       .tira {
@@ -888,8 +950,19 @@ const ALTO_HORA = 62; // píxeles por hora
     `,
   ],
 })
-export class AgendaComponent {
+export class AgendaComponent implements OnDestroy {
   private api = inject(ApiService);
+
+  /**
+   * El panel se refresca solo cada 30 segundos.
+   *
+   * Sin esto, si el bot agenda una cita mientras el dueño tiene la agenda
+   * abierta, él no se entera hasta que recargue la página. Con un salón de
+   * ocho personas y clientas escribiendo a toda hora, eso se nota el primer día.
+   */
+  private reloj?: ReturnType<typeof setInterval>;
+  nuevas = signal(0);
+  private idsConocidos = new Set<number>();
 
   horas = Array.from(
     { length: FIN_DIA - INICIO_DIA },
@@ -951,6 +1024,43 @@ export class AgendaComponent {
 
   constructor() {
     this.cargar();
+    this.reloj = setInterval(() => this.refrescarEnSilencio(), 30000);
+  }
+
+  ngOnDestroy() {
+    if (this.reloj) clearInterval(this.reloj);
+  }
+
+  /**
+   * Vuelve a pedir las citas sin mostrar el «Cargando…» ni cerrar el panel
+   * que el dueño tenga abierto. Si aparecieron citas que no estaban, avisa.
+   */
+  private refrescarEnSilencio() {
+    // Si está agendando o mirando una cita, no se le mueve la pantalla debajo
+    if (this.panel() !== null) return;
+
+    this.api.citasDelDia(this.iso(this.fecha())).subscribe({
+      next: (citas) => {
+        const llegaron = citas.filter(
+          (c) => !this.idsConocidos.has(c.id) && c.estado !== "CANCELADA",
+        ).length;
+
+        if (llegaron > 0 && this.idsConocidos.size > 0) {
+          this.nuevas.update((n) => n + llegaron);
+        }
+
+        citas.forEach((c) => this.idsConocidos.add(c.id));
+        this.citas.set(citas);
+      },
+      error: () => {
+        /* si falla una pasada, se reintenta en la siguiente */
+      },
+    });
+  }
+
+  verNuevas() {
+    this.nuevas.set(0);
+    this.cargar();
   }
 
   /**
@@ -977,6 +1087,10 @@ export class AgendaComponent {
         this.profesionales.set(r.profesionales);
         this.servicios.set(r.servicios);
         this.citas.set(r.citas);
+
+        // Se guarda qué citas ya se vieron, para detectar las que entren después
+        this.idsConocidos = new Set(r.citas.map((c) => c.id));
+        this.nuevas.set(0);
         this.cargando.set(false);
       },
       error: () => {
@@ -990,6 +1104,7 @@ export class AgendaComponent {
     const f = new Date(this.fecha());
     f.setDate(f.getDate() + dias);
     this.fecha.set(f);
+    this.nuevas.set(0);
     this.cargar();
   }
 
