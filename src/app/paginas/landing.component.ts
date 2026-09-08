@@ -485,6 +485,7 @@ import { AuthService } from "../core/auth.service";
             >
             <a href="mailto:hola&#64;cupo.app">hola&#64;cupo.app</a>
             <span>Lun a Sáb · 8 a.m. a 7 p.m.</span>
+            <a href="/privacidad.html">Política de privacidad</a>
           </div>
         </div>
 
