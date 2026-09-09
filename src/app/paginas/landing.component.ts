@@ -315,11 +315,23 @@ import { AuthService } from "../core/auth.service";
             </div>
 
             <p class="nota">
-              La puesta en marcha se cobra una sola vez, desde $200.000, e
+              La puesta en marcha se cobra una sola vez, desde $150.000, e
               incluye cargar sus servicios con sus tiempos, los horarios de cada
               persona y acompañarlos la primera semana. En el mes de prueba va
               sin costo.
             </p>
+
+            <div class="referidos">
+              <div class="referidos-texto">
+                <b>Recomiéndenos y le regalamos un mes</b>
+                <p>
+                  Si otro salón entra a Cupo por recomendación suya, su
+                  siguiente mes va sin costo. Sin tope: por cada uno que se
+                  quede, un mes menos que pagar.
+                </p>
+              </div>
+              <span class="referidos-sello">1 mes<small>gratis</small></span>
+            </div>
           </div>
         </div>
       </section>
@@ -1204,6 +1216,58 @@ import { AuthService } from "../core/auth.service";
         color: var(--gris);
         max-width: 64ch;
         font-weight: 400;
+      }
+
+      .referidos {
+        margin-top: 20px;
+        background: var(--ciruela);
+        color: #fff;
+        border-radius: 22px;
+        padding: 24px 28px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+      .referidos-texto b {
+        display: block;
+        font-size: 20px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        margin-bottom: 6px;
+      }
+      .referidos-texto p {
+        font-size: 15px;
+        color: rgba(255, 255, 255, 0.72);
+        font-weight: 400;
+        max-width: 56ch;
+      }
+      .referidos-sello {
+        flex: none;
+        background: var(--mandarina);
+        color: #fff;
+        border-radius: 16px;
+        padding: 14px 20px;
+        text-align: center;
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
+      .referidos-sello small {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 500;
+        opacity: 0.9;
+        letter-spacing: 0;
+        margin-top: 3px;
+      }
+      @media (max-width: 640px) {
+        .referidos {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 22px;
+        }
       }
 
       /* ---------------- Preguntas ---------------- */
