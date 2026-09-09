@@ -25,6 +25,14 @@ const ALTO_HORA = 62; // píxeles por hora
         </button>
         <button class="boton b-linea b-chico" (click)="irHoy()">Hoy</button>
       </div>
+      <button
+        class="boton b-linea sonido-boton"
+        (click)="alternarSonido()"
+        [attr.aria-pressed]="sonido()"
+        [title]="sonido() ? 'Sonido activado' : 'Sonido apagado'"
+      >
+        {{ sonido() ? "🔔" : "🔕" }}
+      </button>
       <button class="boton b-linea" (click)="abrirPermiso()">
         Sellar permiso
       </button>
@@ -482,6 +490,14 @@ const ALTO_HORA = 62; // píxeles por hora
       .aviso-nuevas b {
         font-size: 16px;
         font-weight: 800;
+      }
+      .sonido-boton {
+        padding: 10px 12px;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .sonido-boton[aria-pressed="false"] {
+        opacity: 0.5;
       }
       .aviso-nuevas:hover {
         filter: brightness(0.95);
@@ -964,6 +980,58 @@ export class AgendaComponent implements OnDestroy {
   nuevas = signal(0);
   private idsConocidos = new Set<number>();
 
+  /** El dueño no está mirando la pantalla todo el día: el sonido lo avisa. */
+  sonido = signal(localStorage.getItem("cupo.sonido") !== "no");
+  private audio?: AudioContext;
+
+  alternarSonido() {
+    const nuevo = !this.sonido();
+    this.sonido.set(nuevo);
+    localStorage.setItem("cupo.sonido", nuevo ? "si" : "no");
+    if (nuevo) this.sonar(); // así comprueba que se oye
+  }
+
+  /**
+   * Un timbre corto generado en el navegador, sin archivos de audio.
+   * Dos notas ascendentes: suena a aviso, no a alarma.
+   */
+  private sonar() {
+    if (!this.sonido()) return;
+
+    try {
+      this.audio ??= new AudioContext();
+      const ctx = this.audio;
+
+      // Los navegadores suspenden el audio hasta que el usuario interactúa
+      if (ctx.state === "suspended") ctx.resume();
+
+      [880, 1174].forEach((frecuencia, i) => {
+        const osc = ctx.createOscillator();
+        const vol = ctx.createGain();
+
+        osc.type = "sine";
+        osc.frequency.value = frecuencia;
+
+        const inicio = ctx.currentTime + i * 0.13;
+        vol.gain.setValueAtTime(0, inicio);
+        vol.gain.linearRampToValueAtTime(0.18, inicio + 0.01);
+        vol.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
+
+        osc.connect(vol).connect(ctx.destination);
+        osc.start(inicio);
+        osc.stop(inicio + 0.32);
+      });
+    } catch {
+      // Si el navegador no deja, no pasa nada: queda el aviso en pantalla
+    }
+  }
+
+  /** El título de la pestaña avisa aunque el dueño esté en otra ventana. */
+  private actualizarTitulo() {
+    const n = this.nuevas();
+    document.title = n > 0 ? `(${n}) Cupo — Agenda` : "Cupo";
+  }
+
   horas = Array.from(
     { length: FIN_DIA - INICIO_DIA },
     (_, i) => INICIO_DIA + i,
@@ -1029,6 +1097,8 @@ export class AgendaComponent implements OnDestroy {
 
   ngOnDestroy() {
     if (this.reloj) clearInterval(this.reloj);
+    document.title = "Cupo";
+    this.audio?.close();
   }
 
   /**
@@ -1047,6 +1117,8 @@ export class AgendaComponent implements OnDestroy {
 
         if (llegaron > 0 && this.idsConocidos.size > 0) {
           this.nuevas.update((n) => n + llegaron);
+          this.sonar();
+          this.actualizarTitulo();
         }
 
         citas.forEach((c) => this.idsConocidos.add(c.id));
@@ -1060,6 +1132,7 @@ export class AgendaComponent implements OnDestroy {
 
   verNuevas() {
     this.nuevas.set(0);
+    this.actualizarTitulo();
     this.cargar();
   }
 
@@ -1091,6 +1164,7 @@ export class AgendaComponent implements OnDestroy {
         // Se guarda qué citas ya se vieron, para detectar las que entren después
         this.idsConocidos = new Set(r.citas.map((c) => c.id));
         this.nuevas.set(0);
+        this.actualizarTitulo();
         this.cargando.set(false);
       },
       error: () => {

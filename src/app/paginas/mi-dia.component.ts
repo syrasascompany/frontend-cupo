@@ -300,6 +300,34 @@ export class MiDiaComponent implements OnDestroy {
   private reloj?: ReturnType<typeof setInterval>;
   nuevas = signal(0);
   private idsConocidos = new Set<number>();
+  private audio?: AudioContext;
+
+  /** Timbre corto: la manicurista tiene el celular a un lado, no en la mano. */
+  private sonar() {
+    try {
+      this.audio ??= new AudioContext();
+      const ctx = this.audio;
+      if (ctx.state === "suspended") ctx.resume();
+
+      [880, 1174].forEach((frecuencia, i) => {
+        const osc = ctx.createOscillator();
+        const vol = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = frecuencia;
+
+        const inicio = ctx.currentTime + i * 0.13;
+        vol.gain.setValueAtTime(0, inicio);
+        vol.gain.linearRampToValueAtTime(0.16, inicio + 0.01);
+        vol.gain.exponentialRampToValueAtTime(0.001, inicio + 0.3);
+
+        osc.connect(vol).connect(ctx.destination);
+        osc.start(inicio);
+        osc.stop(inicio + 0.32);
+      });
+    } catch {
+      /* si el navegador no deja, queda el aviso en pantalla */
+    }
+  }
 
   fecha = signal(new Date());
   citas = signal<Cita[]>([]);
@@ -336,6 +364,7 @@ export class MiDiaComponent implements OnDestroy {
 
   ngOnDestroy() {
     if (this.reloj) clearInterval(this.reloj);
+    this.audio?.close();
   }
 
   private refrescarEnSilencio() {
@@ -347,6 +376,7 @@ export class MiDiaComponent implements OnDestroy {
 
         if (llegaron > 0 && this.idsConocidos.size > 0) {
           this.nuevas.update((n) => n + llegaron);
+          this.sonar();
         }
         citas.forEach((c) => this.idsConocidos.add(c.id));
         this.citas.set(citas);
