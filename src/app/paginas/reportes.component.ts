@@ -2,6 +2,7 @@ import { Component, inject, signal } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { HttpClient, HttpParams } from "@angular/common/http";
+import { ApiService } from "../core/api.service";
 import { entorno } from "../../environments/environment";
 
 interface OcupacionProfesional {
@@ -73,6 +74,13 @@ interface Reporte {
       </button>
       <button class="boton b-linea b-chico" (click)="esteMes()">
         Este mes
+      </button>
+      <button
+        class="boton b-fucsia b-chico descargar"
+        (click)="descargar()"
+        [disabled]="descargando()"
+      >
+        {{ descargando() ? "Preparando…" : "⬇ Descargar para Excel" }}
       </button>
     </div>
 
@@ -227,6 +235,16 @@ interface Reporte {
         gap: 7px;
         flex-wrap: wrap;
         margin-bottom: 18px;
+      }
+      .descargar {
+        margin-left: auto;
+      }
+      @media (max-width: 620px) {
+        .descargar {
+          margin-left: 0;
+          width: 100%;
+          justify-content: center;
+        }
       }
 
       .tarjetas {
@@ -398,11 +416,13 @@ interface Reporte {
 })
 export class ReportesComponent {
   private http = inject(HttpClient);
+  private api = inject(ApiService);
 
   desde = "";
   hasta = "";
   datos = signal<Reporte | null>(null);
   cargando = signal(false);
+  descargando = signal(false);
   error = signal<string | null>(null);
 
   constructor() {
@@ -449,6 +469,35 @@ export class ReportesComponent {
       error: () => {
         this.error.set("No se pudieron calcular los reportes.");
         this.cargando.set(false);
+      },
+    });
+  }
+
+  /**
+   * Baja las citas del rango como archivo para Excel.
+   *
+   * Se pide como blob porque no es JSON, y se arma un enlace temporal para
+   * disparar la descarga: así el navegador la trata como un archivo normal
+   * y el token de la sesión viaja en la petición.
+   */
+  descargar() {
+    if (!this.desde || !this.hasta) return;
+    this.descargando.set(true);
+    this.error.set(null);
+
+    this.api.exportarCitas(this.desde, this.hasta).subscribe({
+      next: (archivo) => {
+        const url = URL.createObjectURL(archivo);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `citas-${this.desde}-a-${this.hasta}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.descargando.set(false);
+      },
+      error: () => {
+        this.descargando.set(false);
+        this.error.set("No se pudo generar el archivo.");
       },
     });
   }

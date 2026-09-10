@@ -79,7 +79,8 @@ import { Cita, Servicio } from "../core/modelos";
                   >{{ nombreServicio(c.servicioId) }} · hasta
                   {{ c.fin | date: "h:mm a" }}</span
                 >
-                @if (c.clienteTelefono) {
+                <!-- @if (c.clienteTelefono) {
+                 
                   <a
                     class="tel"
                     [href]="'https://wa.me/' + c.clienteTelefono"
@@ -87,7 +88,7 @@ import { Cita, Servicio } from "../core/modelos";
                     rel="noopener"
                     >{{ c.clienteTelefono }}</a
                   >
-                }
+                } -->
               </div>
               <button
                 class="boton b-fucsia b-chico"

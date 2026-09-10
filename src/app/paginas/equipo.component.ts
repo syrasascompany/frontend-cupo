@@ -110,14 +110,54 @@ const DIAS = [
                 >
                   {{ p.nombre.slice(0, 2).toUpperCase() }}
                 </span>
-                <h2>{{ p.nombre }}</h2>
-                <button
-                  class="boton b-fucsia"
-                  (click)="guardarTodo()"
-                  [disabled]="guardando()"
-                >
-                  {{ guardando() ? "Guardando…" : "Guardar cambios" }}
-                </button>
+                @if (editandoDatos()) {
+                  <div class="datos-edit">
+                    <input
+                      [(ngModel)]="nombreEdit"
+                      placeholder="Nombre"
+                      aria-label="Nombre"
+                    />
+                    <input
+                      [(ngModel)]="telefonoEdit"
+                      placeholder="Teléfono"
+                      inputmode="tel"
+                      aria-label="Teléfono"
+                    />
+                  </div>
+                  <button
+                    class="boton b-linea b-chico"
+                    (click)="editandoDatos.set(false)"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    class="boton b-fucsia b-chico"
+                    (click)="guardarDatos(p)"
+                    [disabled]="guardando()"
+                  >
+                    Guardar
+                  </button>
+                } @else {
+                  <div>
+                    <h2>{{ p.nombre }}</h2>
+                    <span class="tel-prof">{{
+                      p.telefono || "Sin teléfono"
+                    }}</span>
+                  </div>
+                  <button
+                    class="boton b-linea b-chico"
+                    (click)="editarDatos(p)"
+                  >
+                    Editar datos
+                  </button>
+                  <button
+                    class="boton b-fucsia"
+                    (click)="guardarTodo()"
+                    [disabled]="guardando()"
+                  >
+                    {{ guardando() ? "Guardando…" : "Guardar cambios" }}
+                  </button>
+                }
               </div>
 
               <section>
@@ -367,12 +407,45 @@ const DIAS = [
       }
       .editor-tapa h2 {
         font-size: 21px;
+      }
+      .editor-tapa > div:not(.datos-edit) {
         margin-right: auto;
       }
       .avatar.grande {
         width: 42px;
         height: 42px;
         font-size: 15px;
+      }
+      .tel-prof {
+        font-size: 13px;
+        color: var(--ciruela-3);
+      }
+      .datos-edit {
+        flex: 1;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .datos-edit input {
+        flex: 1;
+        min-width: 130px;
+        padding: 8px 11px;
+        border: 1.5px solid var(--borde);
+        border-radius: 9px;
+        font-size: 14.5px;
+      }
+      .datos-edit input:focus {
+        outline: none;
+        border-color: var(--fucsia);
+      }
+      @media (max-width: 620px) {
+        .editor-tapa {
+          flex-wrap: wrap;
+        }
+        .editor-tapa .boton {
+          flex: 1;
+          justify-content: center;
+        }
       }
 
       section {
@@ -582,6 +655,46 @@ export class EquipoComponent {
   nuevaNombre = "";
   nuevaTelefono = "";
 
+  editandoDatos = signal(false);
+  nombreEdit = "";
+  telefonoEdit = "";
+
+  editarDatos(p: Profesional) {
+    this.nombreEdit = p.nombre;
+    this.telefonoEdit = p.telefono ?? "";
+    this.editandoDatos.set(true);
+  }
+
+  guardarDatos(p: Profesional) {
+    if (!this.nombreEdit.trim()) {
+      this.error.set("El nombre no puede quedar vacío.");
+      return;
+    }
+    this.guardando.set(true);
+    this.error.set(null);
+
+    this.api
+      .actualizarProfesional(p.id, {
+        nombre: this.nombreEdit.trim(),
+        telefono: this.telefonoEdit.trim() || undefined,
+      })
+      .subscribe({
+        next: (actualizada) => {
+          this.guardando.set(false);
+          this.editandoDatos.set(false);
+          this.elegida.set(actualizada);
+          this.aviso.set("Datos actualizados.");
+          this.cargar();
+        },
+        error: (err) => {
+          this.guardando.set(false);
+          this.error.set(
+            err?.error?.mensaje ?? "No se pudieron guardar los datos.",
+          );
+        },
+      });
+  }
+
   acceso = signal<{ tiene: boolean; documento?: string }>({ tiene: false });
   documento = "";
   claveTrabajadora = "";
@@ -616,6 +729,7 @@ export class EquipoComponent {
 
     this.documento = "";
     this.claveTrabajadora = "";
+    this.editandoDatos.set(false);
     this.api.verAcceso(p.id).subscribe((a) => {
       this.acceso.set(a);
       if (a.documento) this.documento = a.documento;

@@ -80,18 +80,72 @@ import { Servicio } from "../core/modelos";
       <div class="rejilla">
         @for (s of servicios(); track s.id) {
           <div class="tarjeta servicio">
-            <b>{{ s.nombre }}</b>
-            <div class="linea">
-              <span class="pastilla p-confirmada">{{ s.duracionMin }} min</span>
-              @if (s.precioCentavos > 0) {
-                <span class="precio">{{
-                  s.precioCentavos / 100
-                    | currency: "COP" : "symbol-narrow" : "1.0-0"
-                }}</span>
-              } @else {
-                <span class="precio sin">Sin precio</span>
-              }
-            </div>
+            @if (editando() === s.id) {
+              <div class="campo">
+                <label [for]="'n' + s.id">Nombre</label>
+                <input [id]="'n' + s.id" [(ngModel)]="edicion.nombre" />
+              </div>
+              <div class="dos-campos">
+                <div class="campo">
+                  <label [for]="'d' + s.id">Duración</label>
+                  <input
+                    [id]="'d' + s.id"
+                    type="number"
+                    min="5"
+                    step="5"
+                    [(ngModel)]="edicion.duracionMin"
+                  />
+                </div>
+                <div class="campo">
+                  <label [for]="'p' + s.id">Precio</label>
+                  <input
+                    [id]="'p' + s.id"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    [(ngModel)]="edicion.precio"
+                  />
+                </div>
+              </div>
+              <div class="acciones-fila">
+                <button
+                  class="boton b-linea b-chico"
+                  (click)="editando.set(null)"
+                >
+                  Cancelar
+                </button>
+                <button
+                  class="boton b-fucsia b-chico"
+                  (click)="guardar(s.id)"
+                  [disabled]="guardando()"
+                >
+                  Guardar
+                </button>
+              </div>
+            } @else {
+              <b>{{ s.nombre }}</b>
+              <div class="linea">
+                <span class="pastilla p-confirmada"
+                  >{{ s.duracionMin }} min</span
+                >
+                @if (s.precioCentavos > 0) {
+                  <span class="precio">{{
+                    s.precioCentavos / 100
+                      | currency: "COP" : "symbol-narrow" : "1.0-0"
+                  }}</span>
+                } @else {
+                  <span class="precio sin">Sin precio</span>
+                }
+              </div>
+              <div class="acciones-fila">
+                <button class="boton b-linea b-chico" (click)="editar(s)">
+                  Editar
+                </button>
+                <button class="boton b-peligro b-chico" (click)="quitar(s)">
+                  Quitar
+                </button>
+              </div>
+            }
           </div>
         }
       </div>
@@ -157,6 +211,20 @@ import { Servicio } from "../core/modelos";
         font-weight: 400;
         font-size: 13.5px;
       }
+      .acciones-fila {
+        display: flex;
+        gap: 7px;
+        margin-top: 13px;
+      }
+      .acciones-fila .boton {
+        flex: 1;
+        justify-content: center;
+      }
+      .dos-campos {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
       @media (max-width: 640px) {
         .tres {
           grid-template-columns: 1fr;
@@ -190,6 +258,64 @@ export class ServiciosComponent {
   abrir = false;
 
   nuevo = { nombre: "", duracionMin: 60, precio: 0 };
+
+  editando = signal<number | null>(null);
+  edicion = { nombre: "", duracionMin: 60, precio: 0 };
+
+  editar(s: Servicio) {
+    this.edicion = {
+      nombre: s.nombre,
+      duracionMin: s.duracionMin,
+      precio: s.precioCentavos / 100,
+    };
+    this.editando.set(s.id);
+  }
+
+  guardar(id: number) {
+    if (!this.edicion.nombre.trim()) {
+      this.error.set("El nombre no puede quedar vacío.");
+      return;
+    }
+    this.guardando.set(true);
+    this.error.set(null);
+
+    this.api
+      .actualizarServicio(id, {
+        nombre: this.edicion.nombre.trim(),
+        duracionMin: this.edicion.duracionMin,
+        precioCentavos: Math.round(this.edicion.precio * 100),
+      })
+      .subscribe({
+        next: () => {
+          this.guardando.set(false);
+          this.editando.set(null);
+          this.cargar();
+        },
+        error: (err) => {
+          this.guardando.set(false);
+          this.error.set(err?.error?.mensaje ?? "No se pudo guardar.");
+        },
+      });
+  }
+
+  /**
+   * No se borra: se desactiva. Las citas viejas de ese servicio tienen que
+   * seguir existiendo en el historial y en los reportes.
+   */
+  quitar(s: Servicio) {
+    if (
+      !confirm(
+        `¿Quitar "${s.nombre}" de la lista?\n\n` +
+          "Deja de ofrecerse, pero las citas anteriores no se pierden.",
+      )
+    )
+      return;
+
+    this.api.desactivarServicio(s.id).subscribe({
+      next: () => this.cargar(),
+      error: () => this.error.set("No se pudo quitar el servicio."),
+    });
+  }
 
   constructor() {
     this.cargar();
