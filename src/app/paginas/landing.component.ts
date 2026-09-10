@@ -314,23 +314,35 @@ import { AuthService } from "../core/auth.service";
               </div>
             </div>
 
-            <p class="nota">
-              La puesta en marcha se cobra una sola vez, desde $150.000, e
-              incluye cargar sus servicios con sus tiempos, los horarios de cada
-              persona y acompañarlos la primera semana. En el mes de prueba va
-              sin costo.
-            </p>
+            <div class="puesta">
+              <b>La puesta en marcha</b>
+              <p>
+                Antes de que usted toque nada, nosotros dejamos el sistema
+                listo: cargamos sus servicios con sus precios y sus tiempos, el
+                horario de cada persona, creamos los accesos del equipo y los
+                acompañamos toda la primera semana.
+              </p>
+              <p>
+                Es un único pago al inicio, desde $150.000 según el tamaño del
+                equipo.
+                <span class="destacado"
+                  >Durante el mes de prueba no se cobra.</span
+                >
+              </p>
+            </div>
 
             <div class="referidos">
               <div class="referidos-texto">
-                <b>Recomiéndenos y le regalamos un mes</b>
+                <b>Programa de recomendación</b>
                 <p>
-                  Si otro salón entra a Cupo por recomendación suya, su
-                  siguiente mes va sin costo. Sin tope: por cada uno que se
-                  quede, un mes menos que pagar.
+                  Si otro negocio contrata Cupo por recomendación suya, se le
+                  obsequia un mes de servicio. Aplica por cada negocio que
+                  permanezca activo, sin límite de recomendaciones.
                 </p>
               </div>
-              <span class="referidos-sello">1 mes<small>gratis</small></span>
+              <span class="referidos-sello"
+                >1 mes<small>de cortesía</small></span
+              >
             </div>
           </div>
         </div>
@@ -1218,8 +1230,67 @@ import { AuthService } from "../core/auth.service";
         font-weight: 400;
       }
 
+      .puesta {
+        margin-top: 22px;
+        background: #fff;
+        border-radius: 22px;
+        padding: 24px 28px;
+      }
+      .puesta b {
+        font-size: 19px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        display: block;
+        margin-bottom: 8px;
+      }
+      .puesta p {
+        font-size: 15.5px;
+        color: var(--gris);
+        font-weight: 400;
+        max-width: 62ch;
+        margin-bottom: 10px;
+      }
+      .puesta .valor {
+        color: var(--ciruela);
+        margin-bottom: 0;
+      }
+      .puesta .valor b {
+        display: inline;
+        font-size: inherit;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .puesta {
+        margin-top: 22px;
+        background: #fff;
+        border-radius: 20px;
+        padding: 24px 28px;
+      }
+      .puesta b {
+        display: block;
+        font-size: 19px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        margin-bottom: 8px;
+      }
+      .puesta p {
+        font-size: 15px;
+        color: var(--gris);
+        font-weight: 400;
+        max-width: 70ch;
+        margin-bottom: 10px;
+      }
+      .puesta p:last-child {
+        margin-bottom: 0;
+      }
+      .destacado {
+        color: var(--ciruela);
+        font-weight: 600;
+      }
+
       .referidos {
-        margin-top: 20px;
+        margin-top: 14px;
         background: var(--ciruela);
         color: #fff;
         border-radius: 22px;
@@ -1230,10 +1301,10 @@ import { AuthService } from "../core/auth.service";
       }
       .referidos-texto b {
         display: block;
-        font-size: 20px;
+        font-size: 19px;
         font-weight: 900;
         letter-spacing: -0.03em;
-        margin-bottom: 6px;
+        margin-bottom: 7px;
       }
       .referidos-texto p {
         font-size: 15px;
@@ -1255,11 +1326,12 @@ import { AuthService } from "../core/auth.service";
       }
       .referidos-sello small {
         display: block;
-        font-size: 12.5px;
+        font-size: 11.5px;
         font-weight: 500;
-        opacity: 0.9;
-        letter-spacing: 0;
-        margin-top: 3px;
+        opacity: 0.92;
+        letter-spacing: 0.01em;
+        margin-top: 4px;
+        white-space: nowrap;
       }
       @media (max-width: 640px) {
         .referidos {
