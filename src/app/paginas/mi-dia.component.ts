@@ -3,7 +3,7 @@ import { CommonModule } from "@angular/common";
 import { forkJoin } from "rxjs";
 import { ApiService } from "../core/api.service";
 import { AuthService } from "../core/auth.service";
-import { Cita, Servicio } from "../core/modelos";
+import { Cita, MetodoPago, Servicio } from "../core/modelos";
 
 /**
  * Lo que ve la manicurista en su celular: sus citas y un botón para
@@ -79,20 +79,10 @@ import { Cita, Servicio } from "../core/modelos";
                   >{{ nombreServicio(c.servicioId) }} · hasta
                   {{ c.fin | date: "h:mm a" }}</span
                 >
-                <!-- @if (c.clienteTelefono) {
-                 
-                  <a
-                    class="tel"
-                    [href]="'https://wa.me/' + c.clienteTelefono"
-                    target="_blank"
-                    rel="noopener"
-                    >{{ c.clienteTelefono }}</a
-                  >
-                } -->
               </div>
               <button
                 class="boton b-fucsia b-chico"
-                (click)="finalizar(c)"
+                (click)="abrirCobro(c)"
                 [disabled]="marcando() === c.id"
               >
                 {{ marcando() === c.id ? "…" : "Finalizar" }}
@@ -109,11 +99,42 @@ import { Cita, Servicio } from "../core/modelos";
               <div class="medio">
                 <b>{{ c.clienteNombre || "Sin nombre" }}</b>
                 <span>{{ nombreServicio(c.servicioId) }}</span>
+                @if (c.metodoPago) {
+                  <span class="pago"
+                    >Pagó en {{ etiquetaPago(c.metodoPago) }}</span
+                  >
+                }
               </div>
               <span class="pastilla p-finalizada">Hecha</span>
             </div>
           }
         }
+      </div>
+    }
+
+    <!--
+      Al terminar se pregunta con qué pagó. Es un toque más, pero es el
+      dato con el que después cuadra la caja y se liquidan las comisiones:
+      si no se marca en el momento, nadie se acuerda después.
+    -->
+    @if (cobrando(); as c) {
+      <div class="velo" (click)="cobrando.set(null)"></div>
+      <div class="hoja-cobro" role="dialog" aria-modal="true">
+        <h2>¿Cómo pagó {{ c.clienteNombre || "la clienta" }}?</h2>
+        <p class="ayuda">{{ nombreServicio(c.servicioId) }}</p>
+
+        <div class="metodos">
+          @for (m of metodos; track m.valor) {
+            <button class="metodo" (click)="finalizar(c, m.valor)">
+              <span class="icono">{{ m.icono }}</span>
+              {{ m.etiqueta }}
+            </button>
+          }
+        </div>
+
+        <button class="despues" (click)="finalizar(c, null)">
+          Marcarlo después
+        </button>
       </div>
     }
   `,
@@ -282,13 +303,82 @@ import { Cita, Servicio } from "../core/modelos";
         font-size: 13px;
         color: var(--ciruela-3);
       }
-      .medio .tel {
-        display: inline-block;
-        margin-top: 3px;
+      .medio .pago {
+        display: block;
         font-size: 12.5px;
-        color: var(--wa);
-        text-decoration: none;
+        color: #0f6b49;
         font-weight: 600;
+        margin-top: 2px;
+      }
+
+      /* ---- Cobro ---- */
+      .velo {
+        position: fixed;
+        inset: 0;
+        background: rgba(42, 10, 28, 0.45);
+        z-index: 150;
+      }
+      .hoja-cobro {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 160;
+        background: var(--papel);
+        border-radius: 22px 22px 0 0;
+        padding: 24px 20px 30px;
+        box-shadow: 0 -12px 40px rgba(42, 10, 28, 0.3);
+        animation: subir 0.3s var(--curva) both;
+      }
+      @keyframes subir {
+        from {
+          transform: translateY(100%);
+        }
+        to {
+          transform: none;
+        }
+      }
+      .hoja-cobro h2 {
+        font-size: 20px;
+        margin-bottom: 3px;
+      }
+      .hoja-cobro .ayuda {
+        font-size: 13.5px;
+        color: var(--ciruela-3);
+        margin-bottom: 18px;
+      }
+      .metodos {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+      }
+      .metodo {
+        border: 1.5px solid var(--borde);
+        border-radius: 13px;
+        padding: 16px 12px;
+        font-size: 15px;
+        font-weight: 600;
+        background: var(--papel);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .metodo:hover {
+        border-color: var(--fucsia);
+        background: var(--fucsia-claro);
+      }
+      .metodo .icono {
+        font-size: 22px;
+      }
+      .despues {
+        display: block;
+        width: 100%;
+        margin-top: 14px;
+        padding: 12px;
+        font-size: 14px;
+        color: var(--ciruela-3);
+        text-decoration: underline;
       }
     `,
   ],
@@ -337,6 +427,16 @@ export class MiDiaComponent implements OnDestroy {
   error = signal<string | null>(null);
   marcando = signal<number | null>(null);
 
+  /** La cita que se está cobrando, mientras se escoge el método. */
+  cobrando = signal<Cita | null>(null);
+
+  metodos: { valor: MetodoPago; etiqueta: string; icono: string }[] = [
+    { valor: "EFECTIVO", etiqueta: "Efectivo", icono: "💵" },
+    { valor: "TRANSFERENCIA", etiqueta: "Transferencia", icono: "📲" },
+    { valor: "TARJETA", etiqueta: "Tarjeta", icono: "💳" },
+    { valor: "OTRO", etiqueta: "Otro", icono: "🧾" },
+  ];
+
   pendientes = computed(() =>
     this.citas().filter((c) => c.estado === "CONFIRMADA"),
   );
@@ -369,6 +469,9 @@ export class MiDiaComponent implements OnDestroy {
   }
 
   private refrescarEnSilencio() {
+    // Si está cobrando, no se le mueve la pantalla debajo
+    if (this.cobrando()) return;
+
     this.api.citasDelDia(this.iso(this.fecha())).subscribe({
       next: (citas) => {
         const llegaron = citas.filter(
@@ -444,15 +547,36 @@ export class MiDiaComponent implements OnDestroy {
     return this.servicios().find((s) => s.id === id)?.nombre ?? "Servicio";
   }
 
+  etiquetaPago(m: MetodoPago) {
+    return (
+      {
+        EFECTIVO: "efectivo",
+        TRANSFERENCIA: "transferencia",
+        TARJETA: "tarjeta",
+        OTRO: "otro medio",
+      }[m] ?? ""
+    );
+  }
+
   duracion(c: Cita) {
     return Math.round(
       (new Date(c.fin).getTime() - new Date(c.inicio).getTime()) / 60000,
     );
   }
 
-  finalizar(c: Cita) {
+  abrirCobro(c: Cita) {
+    this.cobrando.set(c);
+  }
+
+  /**
+   * Cierra la cita. El método de pago puede ir en nulo: si la clienta paga
+   * en administración, lo marca el dueño después desde la agenda.
+   */
+  finalizar(c: Cita, metodo: MetodoPago | null) {
+    this.cobrando.set(null);
     this.marcando.set(c.id);
-    this.api.cambiarEstado(c.id, "FINALIZADA").subscribe({
+
+    this.api.cambiarEstado(c.id, "FINALIZADA", metodo).subscribe({
       next: () => {
         this.marcando.set(null);
         this.cargar();

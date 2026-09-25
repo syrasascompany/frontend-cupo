@@ -3,11 +3,13 @@ import { HttpClient, HttpParams } from "@angular/common/http";
 import { entorno } from "../../environments/environment";
 import {
   Cita,
+  Comisiones,
   Cupo,
   Empresa,
   EstadoCita,
   ExcepcionHorario,
   HorarioBase,
+  MetodoPago,
   Profesional,
   Servicio,
   ServicioProfesional,
@@ -56,11 +58,42 @@ export class ApiService {
     });
   }
 
-  cambiarEstado(citaId: number, valor: EstadoCita) {
+  /**
+   * Cierra o cancela una cita.
+   *
+   * El método de pago es opcional: la trabajadora lo marca al finalizar,
+   * pero si la clienta paga en administración se deja vacío y el dueño lo
+   * marca después con marcarPago.
+   */
+  cambiarEstado(
+    citaId: number,
+    valor: EstadoCita,
+    metodoPago?: MetodoPago | null,
+  ) {
+    let params = new HttpParams().set("valor", valor);
+    if (metodoPago) params = params.set("metodoPago", metodoPago);
+
     return this.http.patch<void>(
       this.url(`/citas/${citaId}/estado`),
       {},
-      { params: new HttpParams().set("valor", valor) },
+      { params },
+    );
+  }
+
+  /**
+   * Marca o corrige con qué pagó una cita ya atendida.
+   *
+   * valorCentavos solo se manda cuando se cobró distinto al precio de
+   * lista, por un descuento por ejemplo.
+   */
+  marcarPago(citaId: number, metodo: MetodoPago, valorCentavos?: number) {
+    let params = new HttpParams().set("metodo", metodo);
+    if (valorCentavos) params = params.set("valorCentavos", valorCentavos);
+
+    return this.http.patch<Cita>(
+      this.url(`/citas/${citaId}/pago`),
+      {},
+      { params },
     );
   }
 
@@ -82,6 +115,14 @@ export class ApiService {
 
   actualizarProfesional(id: number, cuerpo: Partial<Profesional>) {
     return this.http.put<Profesional>(this.url(`/profesionales/${id}`), cuerpo);
+  }
+
+  /** El porcentaje que se le paga sobre lo que produce. */
+  cambiarComision(profesionalId: number, comisionPct: number) {
+    return this.http.patch<Profesional>(
+      this.url(`/profesionales/${profesionalId}/comision`),
+      { comisionPct },
+    );
   }
 
   citasPendientesDe(id: number) {
@@ -126,14 +167,6 @@ export class ApiService {
     return this.http.delete<void>(this.url(`/servicios/${id}`));
   }
 
-  /** Descarga las citas del rango para abrir en Excel. */
-  exportarCitas(desde: string, hasta: string) {
-    return this.http.get(this.url("/exportar/citas"), {
-      params: new HttpParams().set("desde", desde).set("hasta", hasta),
-      responseType: "blob",
-    });
-  }
-
   serviciosDe(profesionalId: number) {
     return this.http.get<ServicioProfesional[]>(
       this.url(`/profesionales/${profesionalId}/servicios`),
@@ -149,6 +182,31 @@ export class ApiService {
       this.url(`/profesionales/${profesionalId}/servicios`),
       lista,
     );
+  }
+
+  // ---------------- Reportes y liquidación ----------------
+
+  /** Producción, comisiones y cómo pagaron, en el rango pedido. */
+  comisiones(desde: string, hasta: string) {
+    return this.http.get<Comisiones>(this.url("/comisiones"), {
+      params: new HttpParams().set("desde", desde).set("hasta", hasta),
+    });
+  }
+
+  /** Descarga las citas del rango para abrir en Excel. */
+  exportarCitas(desde: string, hasta: string) {
+    return this.http.get(this.url("/exportar/citas"), {
+      params: new HttpParams().set("desde", desde).set("hasta", hasta),
+      responseType: "blob",
+    });
+  }
+
+  /** La liquidación que la dueña le pasa al contador. */
+  exportarComisiones(desde: string, hasta: string) {
+    return this.http.get(this.url("/comisiones/exportar"), {
+      params: new HttpParams().set("desde", desde).set("hasta", hasta),
+      responseType: "blob",
+    });
   }
 
   // ---------------- Horarios ----------------

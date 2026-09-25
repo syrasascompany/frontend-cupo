@@ -234,6 +234,51 @@ const DIAS = [
                 </div>
               </section>
 
+              <!--
+                La comisión va aparte de "Guardar cambios" a propósito:
+                es plata, y confundirla con un cambio de horario sería
+                peligroso. Se guarda sola, con su propio botón.
+              -->
+              <section>
+                <h3>Cuánto se le paga</h3>
+                <p class="nota">
+                  El porcentaje de lo que produce que le queda a ella. En la
+                  mayoría de salones es el 50%, pero se ajusta por persona.
+                </p>
+
+                <div class="comision">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="5"
+                    [(ngModel)]="comisionPct"
+                    aria-label="Porcentaje de comisión"
+                  />
+                  <span class="signo">%</span>
+                  <button
+                    class="boton b-linea b-chico"
+                    (click)="guardarComision(p)"
+                    [disabled]="guardando()"
+                  >
+                    Guardar
+                  </button>
+                </div>
+
+                <p class="ejemplo">
+                  Si esta semana produce $400.000, se le pagan
+                  <b>{{
+                    (400000 * comisionPct) / 100
+                      | currency: "COP" : "symbol-narrow" : "1.0-0"
+                  }}</b>
+                  y al salón le quedan
+                  {{
+                    (400000 * (100 - comisionPct)) / 100
+                      | currency: "COP" : "symbol-narrow" : "1.0-0"
+                  }}.
+                </p>
+              </section>
+
               <section>
                 <h3>Acceso para {{ p.nombre }}</h3>
                 <p class="nota">
@@ -563,6 +608,42 @@ const DIAS = [
         color: var(--ciruela-3);
       }
 
+      .comision {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 10px;
+      }
+      .comision input {
+        width: 92px;
+        padding: 9px 11px;
+        border: 1.5px solid var(--borde);
+        border-radius: 9px;
+        font-size: 17px;
+        font-weight: 700;
+        text-align: right;
+      }
+      .comision input:focus {
+        outline: none;
+        border-color: var(--fucsia);
+      }
+      .comision .signo {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--ciruela-3);
+      }
+      .ejemplo {
+        font-size: 13px;
+        color: var(--ciruela-3);
+        background: var(--fondo);
+        border-radius: 9px;
+        padding: 10px 13px;
+        max-width: 60ch;
+      }
+      .ejemplo b {
+        color: var(--ciruela);
+      }
+
       .peligro {
         border: 1px solid #f0c7cf;
         background: #fdf4f5;
@@ -659,6 +740,17 @@ export class EquipoComponent {
   nombreEdit = "";
   telefonoEdit = "";
 
+  acceso = signal<{ tiene: boolean; documento?: string }>({ tiene: false });
+  documento = "";
+  claveTrabajadora = "";
+
+  /** Qué porcentaje se le paga a la profesional que está abierta. */
+  comisionPct = 50;
+
+  constructor() {
+    this.cargar();
+  }
+
   editarDatos(p: Profesional) {
     this.nombreEdit = p.nombre;
     this.telefonoEdit = p.telefono ?? "";
@@ -695,12 +787,35 @@ export class EquipoComponent {
       });
   }
 
-  acceso = signal<{ tiene: boolean; documento?: string }>({ tiene: false });
-  documento = "";
-  claveTrabajadora = "";
+  /**
+   * La comisión se guarda sola, no con "Guardar cambios".
+   *
+   * Es plata: confundirla con un cambio de horario y guardarla sin
+   * querer sería peligroso.
+   */
+  guardarComision(p: Profesional) {
+    if (this.comisionPct < 0 || this.comisionPct > 100) {
+      this.error.set("El porcentaje va entre 0 y 100.");
+      return;
+    }
+    this.guardando.set(true);
+    this.error.set(null);
 
-  constructor() {
-    this.cargar();
+    this.api.cambiarComision(p.id, this.comisionPct).subscribe({
+      next: (actualizada) => {
+        this.guardando.set(false);
+        // Se toma lo que devolvió el backend, no lo que se escribió:
+        // así se ve de una si el servidor lo ajustó o lo rechazó
+        this.elegida.set(actualizada);
+        this.comisionPct = Number(actualizada.comisionPct ?? 50);
+        this.aviso.set(`A ${p.nombre} se le paga el ${this.comisionPct}%.`);
+        this.cargar();
+      },
+      error: (err) => {
+        this.guardando.set(false);
+        this.error.set(err?.error?.mensaje ?? "No se pudo guardar.");
+      },
+    });
   }
 
   cargar() {
@@ -712,8 +827,18 @@ export class EquipoComponent {
         this.profesionales.set(r.profesionales);
         this.servicios.set(r.servicios);
         this.cargando.set(false);
-        if (r.profesionales.length && !this.elegida())
+
+        const abierta = this.elegida();
+        if (abierta) {
+          // Se refresca el objeto abierto con los datos recién traídos
+          const puesta = r.profesionales.find((p) => p.id === abierta.id);
+          if (puesta) {
+            this.elegida.set(puesta);
+            this.comisionPct = Number(puesta.comisionPct ?? 50);
+          }
+        } else if (r.profesionales.length) {
           this.elegir(r.profesionales[0]);
+        }
       },
       error: () => {
         this.error.set("No se pudo cargar el equipo.");
@@ -730,6 +855,8 @@ export class EquipoComponent {
     this.documento = "";
     this.claveTrabajadora = "";
     this.editandoDatos.set(false);
+    this.comisionPct = Number(p.comisionPct ?? 50);
+
     this.api.verAcceso(p.id).subscribe((a) => {
       this.acceso.set(a);
       if (a.documento) this.documento = a.documento;

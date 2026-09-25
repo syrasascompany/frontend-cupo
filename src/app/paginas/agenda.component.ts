@@ -3,7 +3,7 @@ import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { forkJoin } from "rxjs";
 import { ApiService } from "../core/api.service";
-import { Cita, Cupo, Profesional, Servicio } from "../core/modelos";
+import { Cita, Cupo, MetodoPago, Profesional, Servicio } from "../core/modelos";
 
 const INICIO_DIA = 7; // la grilla arranca a las 7 a.m.
 const FIN_DIA = 21;
@@ -54,6 +54,14 @@ const ALTO_HORA = 62; // píxeles por hora
             ? "cita nueva entró por WhatsApp"
             : "citas nuevas entraron por WhatsApp"
         }}
+      </div>
+    }
+
+    @if (sinPago() > 0) {
+      <div class="aviso-pago">
+        <b>{{ sinPago() }}</b>
+        {{ sinPago() === 1 ? "cita atendida" : "citas atendidas" }}
+        sin marcar cómo pagaron. Ábralas y márquelas para que cuadre la caja.
       </div>
     }
 
@@ -133,6 +141,9 @@ const ALTO_HORA = 62; // píxeles por hora
                         class="cita"
                         [class.finalizada]="c.estado === 'FINALIZADA'"
                         [class.ausente]="c.estado === 'NO_ASISTIO'"
+                        [class.falta-pago]="
+                          c.estado === 'FINALIZADA' && !c.metodoPago
+                        "
                         [style.top.px]="tope(c.inicio)"
                         [style.height.px]="alto(c.inicio, c.fin) - 3"
                         (click)="verCita(c)"
@@ -161,6 +172,7 @@ const ALTO_HORA = 62; // píxeles por hora
           <span><i class="c1"></i>Confirmada</span>
           <span><i class="c2"></i>Finalizada</span>
           <span><i class="c3"></i>No llegó</span>
+          <span><i class="c4"></i>Falta marcar el pago</span>
         </div>
       </div>
     }
@@ -312,16 +324,90 @@ const ALTO_HORA = 62; // píxeles por hora
                 }}</span>
               </p>
 
+              <!--
+                El pago no se pregunta al agendar sino al cerrar: antes de
+                atenderla no se sabe si va a agregar algo más.
+              -->
+              @if (c.estado === "FINALIZADA") {
+                <div class="pago">
+                  @if (c.metodoPago && !marcandoPago()) {
+                    <p class="pago-hecho">
+                      Pagó en <b>{{ etiquetaPago(c.metodoPago) }}</b>
+                      @if (c.valorCobradoCentavos) {
+                        ·
+                        {{
+                          c.valorCobradoCentavos / 100
+                            | currency: "COP" : "symbol-narrow" : "1.0-0"
+                        }}
+                      }
+                    </p>
+                    <button class="corregir" (click)="marcandoPago.set(true)">
+                      Corregir
+                    </button>
+                  } @else {
+                    @if (!c.metodoPago) {
+                      <p class="pago-falta">
+                        Falta marcar con qué pagó. Sin esto no cuadra la
+                        liquidación de comisiones.
+                      </p>
+                    }
+                    <div class="metodos-pago">
+                      @for (m of metodosPago; track m.valor) {
+                        <button
+                          class="metodo-pago"
+                          (click)="guardarPago(c, m.valor)"
+                          [disabled]="guardando()"
+                        >
+                          {{ m.icono }} {{ m.etiqueta }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
               @if (c.estado === "CONFIRMADA") {
-                @if (!moviendo()) {
+                @if (cobrando()) {
+                  <!--
+                    Se pregunta el pago en el mismo momento de cerrar la
+                    cita, igual que en el celular de la manicurista. Si se
+                    deja para después, nadie se acuerda.
+                  -->
+                  <div class="cobro">
+                    <p class="cobro-titulo">¿Cómo pagó?</p>
+                    <div class="metodos-pago">
+                      @for (m of metodosPago; track m.valor) {
+                        <button
+                          class="metodo-pago"
+                          (click)="finalizarCon(c, m.valor)"
+                          [disabled]="guardando()"
+                        >
+                          {{ m.icono }} {{ m.etiqueta }}
+                        </button>
+                      }
+                    </div>
+                    <div class="acciones-cita">
+                      <button
+                        class="boton b-linea"
+                        (click)="finalizarCon(c, null)"
+                        [disabled]="guardando()"
+                      >
+                        Cerrar sin marcar el pago
+                      </button>
+                      <button
+                        class="boton b-linea"
+                        (click)="cobrando.set(false)"
+                      >
+                        Volver
+                      </button>
+                    </div>
+                  </div>
+                } @else if (!moviendo()) {
                   <div class="acciones-cita">
                     <button class="boton b-fucsia" (click)="abrirMover(c)">
                       Cambiar día u hora
                     </button>
-                    <button
-                      class="boton b-linea"
-                      (click)="marcar(c, 'FINALIZADA')"
-                    >
+                    <button class="boton b-verde" (click)="cobrando.set(true)">
                       Marcar finalizada
                     </button>
                     <button
@@ -472,14 +558,12 @@ const ALTO_HORA = 62; // píxeles por hora
         padding: 0 18px 80px;
       }
 
-      .aviso-nuevas {
+      .aviso-nuevas,
+      .aviso-pago {
         max-width: 1500px;
         margin: 0 auto 12px;
         padding: 11px 16px;
-        background: var(--wa);
-        color: #fff;
         border-radius: 12px;
-        cursor: pointer;
         display: flex;
         align-items: center;
         gap: 9px;
@@ -487,7 +571,17 @@ const ALTO_HORA = 62; // píxeles por hora
         width: calc(100% - 36px);
         animation: asomar 0.4s var(--curva) both;
       }
-      .aviso-nuevas b {
+      .aviso-nuevas {
+        background: var(--wa);
+        color: #fff;
+        cursor: pointer;
+      }
+      .aviso-pago {
+        background: #fdf3e3;
+        color: #7a4d06;
+      }
+      .aviso-nuevas b,
+      .aviso-pago b {
         font-size: 16px;
         font-weight: 800;
       }
@@ -582,15 +676,13 @@ const ALTO_HORA = 62; // píxeles por hora
       }
       .scroll {
         overflow-x: auto;
+        width: 100%;
       }
       .cuerpo-grilla {
         min-width: max-content;
         position: relative;
         display: flex;
         flex-direction: column;
-      }
-      .scroll {
-        width: 100%;
       }
 
       .cabecera {
@@ -712,6 +804,13 @@ const ALTO_HORA = 62; // píxeles por hora
         border-left-color: var(--ambar);
         color: #7a4d06;
       }
+      /* Atendida pero sin pago marcado: se ve distinta para que salte */
+      .cita.falta-pago {
+        background: #fdf3e3;
+        border-left-color: var(--ambar);
+        color: #7a4d06;
+        border-left-style: dashed;
+      }
 
       .ahora {
         position: absolute;
@@ -748,6 +847,7 @@ const ALTO_HORA = 62; // píxeles por hora
         margin-top: 12px;
         font-size: 12.5px;
         color: var(--ciruela-2);
+        flex-wrap: wrap;
       }
       .leyenda i {
         width: 9px;
@@ -764,6 +864,10 @@ const ALTO_HORA = 62; // píxeles por hora
       }
       .leyenda .c3 {
         background: var(--ambar);
+      }
+      .leyenda .c4 {
+        background: transparent;
+        border: 2px dashed var(--ambar);
       }
 
       .velo {
@@ -877,6 +981,67 @@ const ALTO_HORA = 62; // píxeles por hora
         margin-top: 18px;
       }
 
+      .cobro {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid var(--borde);
+      }
+      .cobro-titulo {
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      .b-verde {
+        background: var(--verde);
+        color: #04291a;
+        font-weight: 700;
+      }
+      .b-verde:hover {
+        filter: brightness(0.95);
+      }
+
+      .pago {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--borde);
+      }
+      .pago-hecho {
+        font-size: 14.5px;
+        color: #0f6b49;
+      }
+      .pago-falta {
+        font-size: 13.5px;
+        color: #7a4d06;
+        background: #fdf3e3;
+        border-radius: 9px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+      }
+      .corregir {
+        font-size: 12.5px;
+        color: var(--ciruela-3);
+        text-decoration: underline;
+        margin-top: 4px;
+      }
+      .metodos-pago {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+        margin-top: 8px;
+      }
+      .metodo-pago {
+        border: 1.5px solid var(--borde);
+        border-radius: 10px;
+        padding: 11px 8px;
+        font-size: 13.5px;
+        font-weight: 600;
+        background: var(--papel);
+      }
+      .metodo-pago:hover {
+        border-color: var(--fucsia);
+        background: var(--fucsia-claro);
+      }
+
       @media (max-width: 820px) {
         .barra {
           gap: 10px;
@@ -936,9 +1101,6 @@ const ALTO_HORA = 62; // píxeles por hora
       }
 
       @media (max-width: 480px) {
-        .lienzo {
-          padding: 0;
-        }
         .contenido {
           padding: 0 10px 80px;
         }
@@ -1061,6 +1223,29 @@ export class AgendaComponent implements OnDestroy {
   guardando = signal(false);
   nombreCliente = "";
   telefonoCliente = "";
+
+  moviendo = signal(false);
+  diaNuevo = "";
+
+  /** Se está corrigiendo un pago ya marcado. */
+  marcandoPago = signal(false);
+
+  /** Se está cerrando una cita y falta escoger con qué pagó. */
+  cobrando = signal(false);
+
+  metodosPago: { valor: MetodoPago; etiqueta: string; icono: string }[] = [
+    { valor: "EFECTIVO", etiqueta: "Efectivo", icono: "💵" },
+    { valor: "TRANSFERENCIA", etiqueta: "Transferencia", icono: "📲" },
+    { valor: "TARJETA", etiqueta: "Tarjeta", icono: "💳" },
+    { valor: "OTRO", etiqueta: "Otro", icono: "🧾" },
+  ];
+
+  /** Citas atendidas del día a las que nadie les marcó el pago. */
+  sinPago = computed(
+    () =>
+      this.citas().filter((c) => c.estado === "FINALIZADA" && !c.metodoPago)
+        .length,
+  );
 
   /** En celular no caben cinco columnas: se puede ver una sola. */
   soloProfesional = signal<number | null>(null);
@@ -1263,10 +1448,18 @@ export class AgendaComponent implements OnDestroy {
     );
   }
 
-  // ---------------- Panel ----------------
+  etiquetaPago(m: MetodoPago) {
+    return (
+      {
+        EFECTIVO: "efectivo",
+        TRANSFERENCIA: "transferencia",
+        TARJETA: "tarjeta",
+        OTRO: "otro medio",
+      }[m] ?? ""
+    );
+  }
 
-  moviendo = signal(false);
-  diaNuevo = "";
+  // ---------------- Panel ----------------
 
   /** Abre el cambio de día u hora sobre una cita existente. */
   abrirMover(c: Cita) {
@@ -1333,6 +1526,8 @@ export class AgendaComponent implements OnDestroy {
 
   verCita(c: Cita) {
     this.citaAbierta.set(c);
+    this.marcandoPago.set(false);
+    this.cobrando.set(false);
     this.panel.set("cita");
   }
 
@@ -1373,6 +1568,8 @@ export class AgendaComponent implements OnDestroy {
     this.panel.set(null);
     this.citaAbierta.set(null);
     this.moviendo.set(false);
+    this.marcandoPago.set(false);
+    this.cobrando.set(false);
   }
 
   buscarCupos() {
@@ -1416,6 +1613,52 @@ export class AgendaComponent implements OnDestroy {
           this.buscarCupos();
         },
       });
+  }
+
+  /**
+   * Marca con qué pagó una cita ya atendida.
+   *
+   * Es para las clientas que pagan en administración después de que la
+   * manicurista cerró la cita, y para arreglar un error de dedo.
+   */
+  guardarPago(c: Cita, metodo: MetodoPago) {
+    this.guardando.set(true);
+
+    this.api.marcarPago(c.id, metodo).subscribe({
+      next: () => {
+        this.guardando.set(false);
+        this.marcandoPago.set(false);
+        this.cerrarPanel();
+        this.cargar();
+      },
+      error: () => {
+        this.guardando.set(false);
+        this.error.set("No se pudo marcar el pago.");
+      },
+    });
+  }
+
+  /**
+   * Cierra la cita y de paso marca el pago.
+   *
+   * El método puede ir en nulo: a veces la clienta se va sin pagar
+   * todavía, y entonces queda pendiente y sale en el aviso de arriba.
+   */
+  finalizarCon(c: Cita, metodo: MetodoPago | null) {
+    this.guardando.set(true);
+
+    this.api.cambiarEstado(c.id, "FINALIZADA", metodo).subscribe({
+      next: () => {
+        this.guardando.set(false);
+        this.cobrando.set(false);
+        this.cerrarPanel();
+        this.cargar();
+      },
+      error: () => {
+        this.guardando.set(false);
+        this.error.set("No se pudo cerrar la cita.");
+      },
+    });
   }
 
   marcar(c: Cita, estado: "FINALIZADA" | "CANCELADA" | "NO_ASISTIO") {
